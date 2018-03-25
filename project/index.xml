@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Projects on Rollul.us</title>
+    <link>/project/</link>
+    <description>Recent content in Projects on Rollul.us</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-us</language>
+    <lastBuildDate>Sat, 24 Nov 2012 14:11:07 +0200</lastBuildDate>
+    
+	<atom:link href="/project/index.xml" rel="self" type="application/rss+xml" />
+    
+    
+    <item>
+      <title>AIVD Cyber Challenge 2012 (Dutch)</title>
+      <link>/project/aivd-cyber-challenge-2012/</link>
+      <pubDate>Sat, 24 Nov 2012 14:11:07 +0200</pubDate>
+      
+      <guid>/project/aivd-cyber-challenge-2012/</guid>
+      <description>I published the following text on pastebin after solving the Cyber Challenge of the AIVD (General Intelligence and Security Service). It involved reverse engineering a binary, finding a weak spot in the crypto and even visiting a physical location, which was quite cool. Together with the five other persons who solved this puzzle, we were invited for a secretive day at their offices.
+Er waren meerdere wegen die naar de oplossing leidden, dit was mijn oplossing.</description>
+    </item>
+    
+  </channel>
+</rss>

@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang='en'>
+  <head>
+    <meta charset='UTF-8'/>
+    <title>A Sad Kafka Broker and Rogue Zookeeper Objects</title>
+    <link rel='stylesheet' href='/css/styles.css'/>
+  </head>
+  <body>
+    <div class="frame">
+      <header>
+        <h1 class="header"><span>Rollul</span><span class="odd">.</span><span>us</span></h1>
+      </header>
+      <nav>
+        <ul class='menu'>          
+          <li>
+            <a href="/post/" class='menu-item'><span>Blog</span></a>
+          </li>
+                  
+          <li>
+            <a href="/project/" class='menu-item'><span>Projects</span></a>
+          </li>
+                  
+          <li>
+            <a href="/about/" class='menu-item'><span>About</span></a>
+          </li>
+        </ul>
+      </nav>
+      <article>
+
+<h1>A Sad Kafka Broker and Rogue Zookeeper Objects</h1>
+
+<p>A few days ago, one of the guys keeping our Kafka cluster up and running reported that a broker stopped running and refused to start.
+He managed to dig up the following stack trace:</p>
+<div class="highlight" style="background: #f0f3f3"><pre style="line-height: 125%"><span></span>[2017-05-02 15:45:10,599] FATAL [Kafka Server 1], Fatal error during KafkaServer startup. Prepare to shutdown (kafka.server.KafkaServer)
+java.lang.IllegalArgumentException: requirement failed
+        at scala.Predef$.require(Predef.scala:212)
+        at kafka.server.DynamicConfigManager$ConfigChangedNotificationHandler$.processNotification(DynamicConfigManager.scala:90)
+        at kafka.common.ZkNodeChangeNotificationListener$$anonfun$kafka$common$ZkNodeChangeNotificationListener$$processNotifications$2$$anonfun$apply$2.apply(ZkNodeChangeNotificationListener.scala:95)
+        at kafka.common.ZkNodeChangeNotificationListener$$anonfun$kafka$common$ZkNodeChangeNotificationListener$$processNotifications$2$$anonfun$apply$2.apply(ZkNodeChangeNotificationListener.scala:95)
+        at scala.Option.map(Option.scala:146)
+        at kafka.common.ZkNodeChangeNotificationListener$$anonfun$kafka$common$ZkNodeChangeNotificationListener$$processNotifications$2.apply(ZkNodeChangeNotificationListener.scala:95)
+        at kafka.common.ZkNodeChangeNotificationListener$$anonfun$kafka$common$ZkNodeChangeNotificationListener$$processNotifications$2.apply(ZkNodeChangeNotificationListener.scala:90)
+        at scala.collection.mutable.ResizableArray$class.foreach(ResizableArray.scala:59)
+        at scala.collection.mutable.ArrayBuffer.foreach(ArrayBuffer.scala:48)
+        at kafka.common.ZkNodeChangeNotificationListener.kafka$common$ZkNodeChangeNotificationListener$$processNotifications(ZkNodeChangeNotificationListener.scala:90)
+        at kafka.common.ZkNodeChangeNotificationListener.processAllNotifications(ZkNodeChangeNotificationListener.scala:79)
+        at kafka.common.ZkNodeChangeNotificationListener.init(ZkNodeChangeNotificationListener.scala:67)
+        at kafka.server.DynamicConfigManager.startup(DynamicConfigManager.scala:122)
+        at kafka.server.KafkaServer.startup(KafkaServer.scala:233)
+        at io.confluent.support.metrics.SupportedServerStartable.startup(SupportedServerStartable.java:100)
+        at io.confluent.support.metrics.SupportedKafka.main(SupportedKafka.java:49)
+[2017-05-02 15:45:10,601] INFO [Kafka Server 1], shutting down (kafka.server.KafkaServer)
+[2017-05-02 15:45:10,602] INFO [Socket Server on Broker 1], Shutting down (kafka.network.SocketServer)
+</pre></div>
+
+<p>After his alarming question &ldquo;can we rebuild the cluster?&rdquo;, my co-worker John and I went out for a hunt.</p>
+
+<p>We checked out Apache Kafka, and&mdash;following the stack trace&mdash;went straight to <code>/core/src/main/scala/kafka/server/DynamicConfigManager.scala</code>&rsquo;s line and found:</p>
+
+<div class="highlight" style="background: #f0f3f3"><pre style="line-height: 125%"><span></span><span style="color: #00AA88; font-weight: bold">Json</span><span style="color: #555555">.</span>parseFull<span style="color: #555555">(</span>json<span style="color: #555555">)</span> <span style="color: #006699; font-weight: bold">match</span> <span style="color: #555555">{</span>
+<span style="color: #006699; font-weight: bold">case</span> <span style="color: #00AA88; font-weight: bold">None</span> <span style="color: #006699; font-weight: bold">=&gt;</span> <span style="color: #0099FF; font-style: italic">// There are no config overrides.</span>
+<span style="color: #0099FF; font-style: italic">// Ignore non-json notifications because they can be from the deprecated TopicConfigManager</span>
+<span style="color: #006699; font-weight: bold">case</span> <span style="color: #00AA88; font-weight: bold">Some</span><span style="color: #555555">(</span>mapAnon<span style="color: #006699; font-weight: bold">:</span> <span style="color: #007788; font-weight: bold">Map</span><span style="color: #555555">[</span><span style="color: #006699; font-weight: bold">_</span>, <span style="color: #006699; font-weight: bold">_</span><span style="color: #555555">])</span> <span style="color: #006699; font-weight: bold">=&gt;</span>
+    <span style="color: #006699; font-weight: bold">val</span> map <span style="color: #006699; font-weight: bold">=</span> mapAnon collect
+    <span style="color: #555555">{</span> <span style="color: #006699; font-weight: bold">case</span> <span style="color: #555555">(</span>k<span style="color: #006699; font-weight: bold">:</span> <span style="color: #007788; font-weight: bold">String</span><span style="color: #555555">,</span> v<span style="color: #006699; font-weight: bold">:</span> <span style="color: #007788; font-weight: bold">Any</span><span style="color: #555555">)</span> <span style="color: #006699; font-weight: bold">=&gt;</span> k <span style="color: #555555">-&gt;</span> v <span style="color: #555555">}</span>
+<span style="background-color: #ffffcc">    require<span style="color: #555555">(</span>map<span style="color: #555555">(</span><span style="color: #CC3300">&quot;version&quot;</span><span style="color: #555555">)</span> <span style="color: #555555">==</span> <span style="color: #FF6600">1</span><span style="color: #555555">)</span>
+</span></pre></div>
+
+
+<p>So, this snippet parses a JSON object, and it <code>require</code>s to have <code>version</code> set to <code>1</code>. According to the stacktrace, <code>version</code> apparently is not equal to <code>1</code>, if it is even there to begin with.
+The helpful comments surrounding that code provide another hint: the offending JSON object might very likely have come from a ZooKeeper znode under <code>/config/changes/</code>.</p>
+
+<p>Firing up our ZooKeeper shells (what a horrible ux!) and a bit of random poking gives:</p>
+<div class="highlight" style="background: #f0f3f3"><pre style="line-height: 125%"><span></span>get /config/changes/config_change_0000000028
+{&quot;version&quot;:2,&quot;entity_path&quot;:&quot;topics/connect_weather_sink_hdfs_configs&quot;}
+</pre></div>
+
+<p>Hah! <code>&quot;version&quot;:2</code>, the  smoking gun. After removing the offending objects, our Kafka broker happily started up again.</p>
+
+
+      </article>
+      <footer>
+        <div class="ccbysa"></div>
+        <div>This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>.</div>
+      </footer>
+    </div>
+  </body>
+</html>
